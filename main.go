@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"flag"
 	"fmt"
@@ -10,6 +11,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/nbd-wtf/go-nostr"
+	"github.com/nbd-wtf/go-nostr/nip04"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/faiface/beep"
@@ -25,12 +29,15 @@ const intitialCheck = 300 * time.Minute
 var lastChecked time.Time
 
 var (
-	acceptAuthors      []string
-	interestingTopics  []string
-	interestingDomains []string
-	territory          string
-	checkInterval      time.Duration
-	targetURL          string
+	acceptAuthors        []string
+	interestingTopics    []string
+	interestingDomains   []string
+	territory            string
+	checkInterval        time.Duration
+	targetURL            string
+	nostrNotifierPrivKey string
+	nostrRecipientPubKey string
+	nostrRelays          []string
 )
 
 const (
@@ -48,7 +55,10 @@ func main() {
 	topicsPtr := flag.String("topics", "", "Comma-separated list of interesting topics")
 	domainsPtr := flag.String("domains", "", "Comma-separated list of interesting domains")
 	territoryPtr := flag.String("territory", "", "Territory, default is home (all)")
-	checkIntervalValue := flag.Int("interval", 5, "Interval check in minutes, default is 5")
+	nostrNotifierPrivKeyPtr := flag.String("nostr-from", "", "Nostr private hex key of the notifier")
+	nostrRecipientPubKeyPtr := flag.String("nostr-to", "", "Nostr public hex key of the recipient (you!)")
+	nostrRelaysPtr := flag.String("nostr-relays", "wss://nostr-pub.wellorder.net,wss://nos.lol,wss://relay.damus.io", "Nostr relays")
+	checkIntervalPtr := flag.Int("interval", 5, "Interval check in minutes, default is 5")
 
 	flag.Parse()
 
@@ -77,7 +87,24 @@ func main() {
 		targetURL = "https://stacker.news/recent"
 	}
 
-	checkInterval = time.Duration(*checkIntervalValue) * time.Minute
+	if *nostrNotifierPrivKeyPtr != "" {
+		nostrNotifierPrivKey = *nostrNotifierPrivKeyPtr
+	}
+
+	if *nostrRecipientPubKeyPtr != "" {
+		nostrRecipientPubKey = *nostrRecipientPubKeyPtr
+	}
+
+	if *nostrRelaysPtr != "" {
+		nostrRelays = strings.Split(*nostrRelaysPtr, ",")
+	}
+
+	if (nostrNotifierPrivKey+nostrRecipientPubKey) != "" && (nostrNotifierPrivKey == "" || nostrRecipientPubKey == "") {
+		fmt.Println(customMagenta + "You must provide both -nostr-from and -nostr-to" + reset)
+		os.Exit(0)
+	}
+
+	checkInterval = time.Duration(*checkIntervalPtr) * time.Minute
 
 	playBeep()
 	// Run initially and start the ticker for periodic scraping
@@ -124,14 +151,22 @@ func checkForNewItems(interval time.Duration) {
 			(isAuthorAccepted(author) ||
 				containsInterestingTopic(title) ||
 				containsInterestingDomains(domain)) {
-			localTime := parsedDate.Local()
-			fmt.Println(customMagenta + author + reset + " - " + customGray + localTime.Format("2006-01-02 15:04") + reset)
+			localTime := parsedDate.Local().Format("2006-01-02 15:04")
+			fmt.Println(customMagenta + author + reset + " - " + customGray + localTime + reset)
 			fmt.Println(customBlu + title + reset)
+			nostrNote := author + " - " + localTime + "\n" + title + "\n"
 			if domain != "" {
 				fmt.Println(domain)
+				nostrNote = nostrNote + domain + "\n"
 			}
 			fmt.Println(customYellow + "https://stacker.news" + url + reset + "\n")
-			playBeep()
+			nostrNote = nostrNote + "\nhttps://stacker.news" + url
+
+			if nostrNotifierPrivKey != "" {
+				nostrNotify(nostrNote)
+			} else {
+				playBeep()
+			}
 		}
 	})
 
@@ -252,4 +287,43 @@ func playBeep() {
 	})))
 
 	<-done
+}
+
+func nostrNotify(payload string) {
+	sk := nostrNotifierPrivKey
+	pub, _ := nostr.GetPublicKey(sk)
+
+	ev := nostr.Event{
+		PubKey:    pub,
+		CreatedAt: nostr.Now(),
+		Kind:      nostr.KindEncryptedDirectMessage,
+		Tags:      nostr.Tags{nostr.Tag{"p", nostrRecipientPubKey}},
+	}
+
+	// calling Sign sets the event ID field and the event Sig field
+	ss, err := nip04.ComputeSharedSecret(nostrRecipientPubKey, sk)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(0)
+	}
+	ev.Content, err = nip04.Encrypt(payload, ss)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(0)
+	}
+	ev.Sign(sk)
+
+	// publish the event to two relays
+	ctx := context.Background()
+	for _, url := range nostrRelays {
+		relay, err := nostr.RelayConnect(ctx, url)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		if err := relay.Publish(ctx, ev); err != nil {
+			fmt.Println(err)
+			continue
+		}
+	}
 }
