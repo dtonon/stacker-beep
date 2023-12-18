@@ -1,12 +1,12 @@
 # Stacker Beep
 
-Use this command line utility to be informed, with a *beep*, about new content of Stacker.news, filtering by authors, topics, domains and territory. A mute list is also supported.
+Use this command line utility to be informed, with a *beep* or via *Nostr DMs*, about new content of Stacker.news, filtering by authors, topics, domains and territory. A mute list is also supported.
 
 ![](screen.png)
 
 ## Nostr notification
 
-Nostr notifications via DM are available using the *-nostr-from* and *-nostr-to* options. This is useful to run Stacker Beep in headless mode, either remotely or in the local PC with a background process, to route notifications to the preferred Nostr client.
+Nostr notifications via DM are available using the *-nostr-from* and *-nostr-to* options. This is useful to run Stacker Beep in headless mode, either remotely or in a local PC with a background process, to route notifications to your preferred Nostr client.
 
 For `-nostr-from` use a random key, **not** your private key. A static key, versus random generated ones, is useful to have all the notifications in a single conversation, so avoid spamming your inbox.
 
