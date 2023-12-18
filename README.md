@@ -1,6 +1,6 @@
 # Stacker Beep
 
-Use this command line utility to be informed, with a *beep*, about new content of Stacker.news, filtering by authors, topics, domains and territory.
+Use this command line utility to be informed, with a *beep*, about new content of Stacker.news, filtering by authors, topics, domains and territory. A mute list is also supported.
 
 ![](screen.png)
 
@@ -13,11 +13,15 @@ For `-nostr-from` use a random key, **not** your private key. A static key, vers
 ## Usage examples
 
 ```
-sn-alert -authors=sn,k00b,kr,ekzyis,hn -topics=nostr,adoption,onboarding,wallet,hack -domains=github,lopp
+stacker-beep -authors=sn,k00b,kr,ekzyis,hn \
+-topics=nostr,adoption,onboarding,wallet,hack \
+-domains=github,lopp
 ```
 
 ```
-stacker-beep -topics=channel,fee,node -territory=bitcoin
+stacker-beep -topics=channel,fee,node \
+-mute=eth
+-territory=bitcoin
 ```
 
 ```

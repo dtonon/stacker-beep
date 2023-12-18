@@ -32,6 +32,7 @@ var (
 	acceptAuthors        []string
 	interestingTopics    []string
 	interestingDomains   []string
+	mutedWords           []string
 	territory            string
 	checkInterval        time.Duration
 	targetURL            string
@@ -54,6 +55,7 @@ func main() {
 	authorsPtr := flag.String("authors", "", "Comma-separated list of accepted authors")
 	topicsPtr := flag.String("topics", "", "Comma-separated list of interesting topics")
 	domainsPtr := flag.String("domains", "", "Comma-separated list of interesting domains")
+	mutedWordsPtr := flag.String("mute", "", "Comma-separated list of muted words (applied to authors, topics, domains)")
 	territoryPtr := flag.String("territory", "", "Territory, default is home (all)")
 	nostrNotifierPrivKeyPtr := flag.String("nostr-from", "", "Nostr private hex key of the notifier")
 	nostrRecipientPubKeyPtr := flag.String("nostr-to", "", "Nostr public hex key of the recipient (you!)")
@@ -76,6 +78,9 @@ func main() {
 	}
 	if *domainsPtr != "" {
 		interestingDomains = strings.Split(*domainsPtr, ",")
+	}
+	if *mutedWordsPtr != "" {
+		mutedWords = strings.Split(*mutedWordsPtr, ",")
 	}
 	if *territoryPtr != "" {
 		territory = *territoryPtr
@@ -148,9 +153,12 @@ func checkForNewItems(interval time.Duration) {
 			return
 		}
 		if time.Since(parsedDate) < interval &&
-			(isAuthorAccepted(author) ||
-				containsInterestingTopic(title) ||
-				containsInterestingDomains(domain)) {
+			(isIncluded(author, acceptAuthors, true) ||
+				isIncluded(title, interestingTopics, false) ||
+				isIncluded(domain, interestingDomains, false)) &&
+			!isIncluded(author, mutedWords, true) &&
+			!isIncluded(title, mutedWords, false) &&
+			!isIncluded(domain, mutedWords, false) {
 			localTime := parsedDate.Local().Format("2006-01-02 15:04")
 			fmt.Println(customMagenta + author + reset + " - " + customGray + localTime + reset)
 			fmt.Println(customBlu + title + reset)
@@ -182,18 +190,6 @@ func extractAuthor(htmlString string) string {
 	return ""
 }
 
-func isAuthorAccepted(author string) bool {
-	if len(acceptAuthors) == 0 {
-		return false
-	}
-	for _, accepted := range acceptAuthors {
-		if author == accepted {
-			return true
-		}
-	}
-	return false
-}
-
 func extractDate(htmlString string) string {
 	re := regexp.MustCompile(`title="(2023[^"]*)"`)
 	matches := re.FindStringSubmatch(htmlString)
@@ -221,26 +217,15 @@ func extractDomain(htmlString string) string {
 	return ""
 }
 
-func containsInterestingTopic(text string) bool {
-	if len(interestingTopics) == 0 {
+func isIncluded(text string, list []string, fullMatch bool) bool {
+	if len(list) == 0 {
 		return false
 	}
 	lowercaseText := strings.ToLower(text)
-	for _, topic := range interestingTopics {
-		if strings.Contains(lowercaseText, topic) {
+	for _, el := range list {
+		if fullMatch && strings.ToLower(el) == lowercaseText {
 			return true
-		}
-	}
-	return false
-}
-
-func containsInterestingDomains(url string) bool {
-	if len(interestingDomains) == 0 {
-		return false
-	}
-	lowercaseText := strings.ToLower(url)
-	for _, topic := range interestingDomains {
-		if strings.Contains(lowercaseText, topic) {
+		} else if strings.Contains(lowercaseText, strings.ToLower(el)) {
 			return true
 		}
 	}
