@@ -191,7 +191,7 @@ func extractAuthor(htmlString string) string {
 }
 
 func extractDate(htmlString string) string {
-	re := regexp.MustCompile(`title="(2023[^"]*)"`)
+	re := regexp.MustCompile(`title="(20\d\d[^"]*)"`)
 	matches := re.FindStringSubmatch(htmlString)
 	if len(matches) >= 2 {
 		return matches[1]
